@@ -29,6 +29,9 @@ var parseCurlCommand = function (curlCommand) {
   // yargs parses -XPOST as separate arguments. just prescreen for it.
   curlCommand = curlCommand.replace(/ -XPOST/, ' -X POST')
   curlCommand = curlCommand.replace(/ -XGET/, ' -X GET')
+  curlCommand = curlCommand.replace(/ -XPUT/, ' -X PUT')
+  curlCommand = curlCommand.replace(/ -XPATCH/, ' -X PATCH')
+  curlCommand = curlCommand.replace(/ -XDELETE/, ' -X DELETE')
   curlCommand = curlCommand.trim()
   var yargObject = yargs(curlCommand)
   var parsedArguments = yargObject.argv
@@ -121,7 +124,11 @@ var parseCurlCommand = function (curlCommand) {
     method = 'delete'
   } else if (parsedArguments.X === 'OPTIONS') {
     method = 'options'
-  } else if (parsedArguments.d || parsedArguments.data || parsedArguments['data-binary']) {
+  } else if (parsedArguments['d'] ||
+      parsedArguments['data'] ||
+      parsedArguments['data-binary'] ||
+      parsedArguments['F'] ||
+      parsedArguments['form']) {
     method = 'post'
   } else {
     method = 'get'

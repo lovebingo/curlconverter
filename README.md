@@ -1,6 +1,6 @@
 #  [![NPM version][npm-image]][npm-url][![Build Status](https://travis-ci.org/NickCarneiro/curlconverter.svg)](https://travis-ci.org/NickCarneiro/curlconverter)
 
-Convert cURL syntax to native Python, PHP, and JavaScript HTTP code
+Convert cURL syntax to native Python, Go, PHP, JavaScript, and R HTTP code
 
 ## Live Demo
 
@@ -51,6 +51,11 @@ response = requests.get('http://en.wikipedia.org/', headers=headers, cookies=coo
 
 ## Contributing
 
+> I'd rather write programs to write programs than write programs.
+> 
+> 
+> Dick Sites, Digital Equipment Corporation, September 1985
+
 Make sure you're running node 6 or greater. The test suite will fail on older versions of node.
 
 If you want to add new functionality, start with a test.
@@ -74,6 +79,19 @@ Here's my Intellij run configuration for a single test:
 
 If you get stuck, please reach out via email. I am always willing to hop on a google hangout and pair program.
 
+## Contributors
+
+- hrbrmstr (R support)
+- daniellockard (Go support)
+- eliask (improve python output)
+- trdarr (devops and code style)
+- nashe (fix PHP output)
+- bfontaine (reduce code duplication in test suite)
+- seadog007
+- nicktimko
+- wkalt
+- nico202
+- r3m0t
 
 ## License
 

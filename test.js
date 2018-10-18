@@ -14,6 +14,11 @@ var yargs = require('yargs')
 
 const outputs = [
   {
+    name: 'R',
+    extension: 'R',
+    command: curlconverter.toR
+  },
+  {
     name: 'Python',
     extension: 'py',
     command: curlconverter.toPython
@@ -27,7 +32,13 @@ const outputs = [
     name: 'PHP',
     extension: 'php',
     command: curlconverter.toPhp
+  },
+  {
+    name: 'Go',
+    extension: 'go',
+    command: curlconverter.toGo
   }
+
 ]
 
 var testFile = function (fileName) {

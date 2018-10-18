@@ -1,8 +1,18 @@
+// Author: Bob Rudis (bob@rud.is)
+
 var util = require('../util')
 var jsesc = require('jsesc')
 var querystring = require('querystring')
 
 require('string.prototype.startswith')
+
+function reprn (value) { // back-tick quote names
+  if (!value) {
+    return '``'
+  } else {
+    return '`' + value + '`'
+  }
+}
 
 function repr (value) {
   // In context of url parameters, don't accept nulls and such.
@@ -14,18 +24,18 @@ function repr (value) {
 }
 
 function getQueryDict (request) {
-  var queryDict = 'params = (\n'
-  for (var paramName in request.query) {
+  var queryDict = 'params = list(\n'
+  queryDict += Object.keys(request.query).map((paramName) => {
     var rawValue = request.query[paramName]
     var paramValue
     if (Array.isArray(rawValue)) {
-      paramValue = '[' + rawValue.map(repr).join(', ') + ']'
+      paramValue = 'c(' + rawValue.map(repr).join(', ') + ')'
     } else {
       paramValue = repr(rawValue)
     }
-    queryDict += '    (' + repr(paramName) + ', ' + paramValue + '),\n'
-  }
-  queryDict += ')\n'
+    return ('  ' + reprn(paramName) + ' = ' + paramValue)
+  }).join(',\n')
+  queryDict += '\n)\n'
   return queryDict
 }
 
@@ -35,11 +45,7 @@ function getDataString (request) {
   }
   if (request.data.startsWith('@')) {
     var filePath = request.data.slice(1)
-    if (request.isDataBinary) {
-      return 'data = open(\'' + filePath + '\', \'rb\').read()'
-    } else {
-      return 'data = open(\'' + filePath + '\')'
-    }
+    return 'data = upload_file(\'' + filePath + '\')'
   }
 
   var parsedQueryString = querystring.parse(request.data)
@@ -64,72 +70,71 @@ function getMultipleDataString (request, parsedQueryString) {
 
   var dataString
   if (repeatedKey) {
-    dataString = 'data = [\n'
+    var els = []
+    dataString = 'data = list(\n'
     for (key in parsedQueryString) {
       value = parsedQueryString[key]
       if (Array.isArray(value)) {
         for (var i = 0; i < value.length; i++) {
-          dataString += '  (' + repr(key) + ', ' + repr(value[i]) + '),\n'
+          els.push('  ' + reprn(key) + ' = ' + repr(value[i]))
         }
       } else {
-        dataString += '  (' + repr(key) + ', ' + repr(value) + '),\n'
+        els.push('  ' + reprn(key) + ' = ' + repr(value))
       }
     }
-    dataString += ']\n'
+    dataString += els.join(',\n')
+    dataString += '\n)\n'
   } else {
-    dataString = 'data = {\n'
-    var elementCount = Object.keys(parsedQueryString).length
-    i = 0
-    for (key in parsedQueryString) {
+    dataString = 'data = list(\n'
+    dataString += Object.keys(parsedQueryString).map((key) => {
       value = parsedQueryString[key]
-      dataString += '  ' + repr(key) + ': ' + repr(value)
-      if (i === elementCount - 1) {
-        dataString += '\n'
-      } else {
-        dataString += ',\n'
-      }
-      i++
-    }
-    dataString += '}\n'
+      return ('  ' + reprn(key) + ' = ' + repr(value))
+    }).join(',\n')
+    dataString += '\n)\n'
   }
 
   return dataString
 }
 
 function getFilesString (request) {
-  // http://docs.python-requests.org/en/master/user/quickstart/#post-a-multipart-encoded-file
-  var filesString = 'files = {\n'
-  for (var multipartKey in request.multipartUploads) {
+  // http://docs.rstats-requests.org/en/master/user/quickstart/#post-a-multipart-encoded-file
+  var filesString = 'files = list(\n'
+  filesString += Object.keys(request.multipartUploads).map((multipartKey) => {
     var multipartValue = request.multipartUploads[multipartKey]
+    var fileParam
     if (multipartValue.startsWith('@')) {
       var fileName = multipartValue.slice(1)
-      filesString += '    ' + repr(multipartKey) + ': (' + repr(fileName) + ', open(' + repr(fileName) + ", 'rb')),\n"
+      // filesString += '    ' + reprn(multipartKey) + ' (' + repr(fileName) + ', upload_file(' + repr(fileName) + '))'
+      fileParam = '  ' + reprn(multipartKey) + ' = upload_file(' + repr(fileName) + ')'
     } else {
-      filesString += '    ' + repr(multipartKey) + ': (None, ' + repr(multipartValue) + '),\n'
+      fileParam = '  ' + reprn(multipartKey) + ' = ' + repr(multipartValue) + ''
     }
-  }
-  filesString += '}\n'
+    return (fileParam)
+  }).join(',\n')
+  filesString += '\n)\n'
 
   return filesString
 }
 
-var toPython = function (curlCommand) {
+var torstats = function (curlCommand) {
   var request = util.parseCurlCommand(curlCommand)
   var cookieDict
   if (request.cookies) {
-    cookieDict = 'cookies = {\n'
-    for (var cookieName in request.cookies) {
-      cookieDict += '    ' + repr(cookieName) + ': ' + repr(request.cookies[cookieName]) + ',\n'
-    }
-    cookieDict += '}\n'
+    cookieDict = 'cookies = c(\n'
+    cookieDict += Object.keys(request.cookies).map((cookieName) => {
+      return ('  ' + repr(cookieName) + ' = ' + repr(request.cookies[cookieName]))
+    }).join(',\n')
+    cookieDict += '\n)\n'
   }
   var headerDict
   if (request.headers) {
-    headerDict = 'headers = {\n'
+    var hels = []
+    headerDict = 'headers = c(\n'
     for (var headerName in request.headers) {
-      headerDict += '    ' + repr(headerName) + ': ' + repr(request.headers[headerName]) + ',\n'
+      hels.push('  ' + reprn(headerName) + ' = ' + repr(request.headers[headerName]))
     }
-    headerDict += '}\n'
+    headerDict += hels.join(',\n')
+    headerDict += '\n)\n'
   }
 
   var queryDict
@@ -144,7 +149,7 @@ var toPython = function (curlCommand) {
   } else if (request.multipartUploads) {
     filesString = getFilesString(request)
   }
-  // curl automatically prepends 'http' if the scheme is missing, but python fails and returns an error
+  // curl automatically prepends 'http' if the scheme is missing, but rstats fails and returns an error
   // we tack it on here to mimic curl
   if (request.url.indexOf('http') !== 0) {
     request.url = 'http://' + request.url
@@ -152,65 +157,65 @@ var toPython = function (curlCommand) {
   if (request.urlWithoutQuery.indexOf('http') !== 0) {
     request.urlWithoutQuery = 'http://' + request.urlWithoutQuery
   }
-  var requestLineWithUrlParams = 'response = requests.' + request.method + '(\'' + request.urlWithoutQuery + '\''
-  var requestLineWithOriginalUrl = 'response = requests.' + request.method + '(\'' + request.url + '\''
+  var requestLineWithUrlParams = 'res <- httr::' + request.method.toUpperCase() + '(url = \'' + request.urlWithoutQuery + '\''
+  var requestLineWithOriginalUrl = 'res <- httr::' + request.method.toUpperCase() + '(url = \'' + request.url + '\''
 
   var requestLineBody = ''
   if (request.headers) {
-    requestLineBody += ', headers=headers'
+    requestLineBody += ', httr::add_headers(.headers=headers)'
   }
   if (request.query) {
-    requestLineBody += ', params=params'
+    requestLineBody += ', query = params'
   }
   if (request.cookies) {
-    requestLineBody += ', cookies=cookies'
+    requestLineBody += ', httr::set_cookies(.cookies = cookies)'
   }
   if (typeof request.data === 'string') {
-    requestLineBody += ', data=data'
+    requestLineBody += ', body = data'
   } else if (request.multipartUploads) {
-    requestLineBody += ', files=files'
+    requestLineBody += ', body = files'
   }
   if (request.insecure) {
-    requestLineBody += ', verify=False'
+    requestLineBody += ', config = httr::config(ssl_verifypeer = FALSE)'
   }
   if (request.auth) {
     var splitAuth = request.auth.split(':')
     var user = splitAuth[0] || ''
     var password = splitAuth[1] || ''
-    requestLineBody += ', auth=(' + repr(user) + ', ' + repr(password) + ')'
+    requestLineBody += ', httr::authenticate(' + repr(user) + ', ' + repr(password) + ')'
   }
   requestLineBody += ')'
 
-  requestLineWithOriginalUrl += requestLineBody.replace(', params=params', '')
+  requestLineWithOriginalUrl += requestLineBody.replace(', query = params', '')
   requestLineWithUrlParams += requestLineBody
 
-  var pythonCode = ''
-  pythonCode += 'import requests\n\n'
+  var rstatsCode = ''
+  rstatsCode += 'require(httr)\n\n'
   if (cookieDict) {
-    pythonCode += cookieDict + '\n'
+    rstatsCode += cookieDict + '\n'
   }
   if (headerDict) {
-    pythonCode += headerDict + '\n'
+    rstatsCode += headerDict + '\n'
   }
   if (queryDict) {
-    pythonCode += queryDict + '\n'
+    rstatsCode += queryDict + '\n'
   }
   if (dataString) {
-    pythonCode += dataString + '\n'
+    rstatsCode += dataString + '\n'
   } else if (filesString) {
-    pythonCode += filesString + '\n'
+    rstatsCode += filesString + '\n'
   }
-  pythonCode += requestLineWithUrlParams
+  rstatsCode += requestLineWithUrlParams
 
   if (request.query) {
-    pythonCode += '\n\n' +
+    rstatsCode += '\n\n' +
             '#NB. Original query string below. It seems impossible to parse and\n' +
             '#reproduce query strings 100% accurately so the one below is given\n' +
             '#in case the reproduced version is not "correct".\n'
-    pythonCode += '# ' + requestLineWithOriginalUrl
+    rstatsCode += '# ' + requestLineWithOriginalUrl
   }
 
-  return pythonCode + '\n'
+  return rstatsCode + '\n'
 }
 
-module.exports = toPython
+module.exports = torstats
